@@ -184,6 +184,8 @@ func (p VhostUserNetworkConfigurator) generateDomainInterface(vhostIface *VhostU
 		domIface.ACPI = &libvirtxml.DomainDeviceACPI{Index: uint(vhostIface.VmiSpecIface.ACPIIndex)}
 	}
 
+	domIface.MTU = &libvirtxml.DomainInterfaceMTU{Size: vhostIface.Metadata.MTU}
+
 	return domIface, nil
 }
 

@@ -41,6 +41,16 @@ const (
 	// VhostPathKey is the device attribute key that the OVS-DPDK DRA driver
 	// uses to publish the vhost-user socket path.
 	VhostPathKey = "vhost-user-path"
+
+	// MTUKey is the mandatory device attribute key for the MTU value.
+	MTUKey = "mtu"
+
+	// minMTU is the minimum valid MTU value according to RFC 791.
+	minMTU = 68
+
+	// maxMTU is the maximum valid MTU value according to OVS-DPDK
+	// (see https://github.com/openvswitch/ovs/blob/b30f621502752463807af7bb8bcf3a0c763544cf/lib/netdev-dpdk.c#L3502-L3521)
+	maxMTU = 9702
 )
 
 // OvsDpdkDriver implements [driver.DRADriver] for the OVS-DPDK DRA driver.
@@ -55,18 +65,18 @@ func NewOvsDpdkDriver(meta metadata.DRAMetadataProvider) *OvsDpdkDriver {
 
 // GetVhostMetadata implements [driver.DRADriver].  It reads the OVS-DPDK DRA
 // driver metadata for the given ResourceClaimTemplate claim and request, and
-// extracts the vhost-user socket path.
+// extracts the vhost-user metadata.
 func (o *OvsDpdkDriver) GetVhostMetadata(claimName, requestName string) (driver.VhostMetadata, error) {
 	dm, err := o.meta.Read(DriverName, claimName, requestName)
 	if err != nil {
 		return driver.VhostMetadata{}, fmt.Errorf("read OVS-DPDK DRA metadata for claim %q request %q: %w", claimName, requestName, err)
 	}
 
-	key := resourceapi.QualifiedName(VhostPathKey)
 	var result *driver.VhostMetadata
 	for _, req := range dm.Requests {
 		for _, dev := range req.Devices {
-			attr, ok := dev.Attributes[key]
+			// Mandatory attribute: vhost-user-path
+			attr, ok := dev.Attributes[resourceapi.QualifiedName(VhostPathKey)]
 			if !ok {
 				continue
 			}
@@ -80,15 +90,33 @@ func (o *OvsDpdkDriver) GetVhostMetadata(claimName, requestName string) (driver.
 				break
 			}
 			vhostPath := *attr.StringValue
-			klog.Infof("ovsdpdk: DRA metadata resolved %q=%q for claim %q request %q",
-				VhostPathKey, vhostPath, claimName, requestName)
 			result = &driver.VhostMetadata{VhostPath: vhostPath}
+
+			// Mandatory attribute: mtu
+			attr, ok = dev.Attributes[resourceapi.QualifiedName(MTUKey)]
+			if !ok {
+				return driver.VhostMetadata{}, fmt.Errorf("mandatory attribute %q not found in claim %q request %q",
+					MTUKey, claimName, requestName)
+			}
+			if attr.IntValue == nil {
+				return driver.VhostMetadata{}, fmt.Errorf("attribute %q in claim %q request %q is not an integer",
+					MTUKey, claimName, requestName)
+			}
+			if *attr.IntValue < minMTU {
+				return driver.VhostMetadata{}, fmt.Errorf("attribute %q value %d in claim %q request %q is below minimum MTU of %d",
+					MTUKey, *attr.IntValue, claimName, requestName, minMTU)
+			}
+			if *attr.IntValue > maxMTU {
+				return driver.VhostMetadata{}, fmt.Errorf("attribute %q value %d in claim %q request %q is above maximum MTU of %d",
+					MTUKey, *attr.IntValue, claimName, requestName, maxMTU)
+			}
+			result.MTU = uint(*attr.IntValue)
 		}
 	}
-
-	if result != nil {
-		return *result, nil
+	if result == nil {
+		return driver.VhostMetadata{}, fmt.Errorf("ovsdpdk: DRA metadata for %q/%q containing mandatory attribute %q not found. Have: %+v",
+			claimName, requestName, VhostPathKey, dm)
 	}
-	return driver.VhostMetadata{}, fmt.Errorf("attribute %q not found in OVS-DPDK DRA metadata for claim %q request %q",
-		VhostPathKey, claimName, requestName)
+	klog.Infof("DRA metadata resolved: %s", result)
+	return *result, nil
 }

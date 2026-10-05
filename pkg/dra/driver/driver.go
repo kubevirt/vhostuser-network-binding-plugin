@@ -20,11 +20,22 @@
 // Package driver defines the vhost-user DRA driver abstraction.
 package driver
 
-// VhostMetadata holds the vhost-user socket information extracted from a DRA
+import (
+	"fmt"
+)
+
+// VhostMetadata holds the vhost-user socket and MTU information extracted from a DRA
 // driver's device metadata.
 type VhostMetadata struct {
 	// VhostPath is the absolute in-container path to the vhost-user socket.
 	VhostPath string
+	// MTU is the MTU value to configure on the interface, as reported by the
+	// DRA driver's device metadata.
+	MTU uint
+}
+
+func (m VhostMetadata) String() string {
+	return fmt.Sprintf("{VhostPath: %s, MTU: %d}", m.VhostPath, m.MTU)
 }
 
 // DRADriver extracts vhost-user socket information from a DRA driver's device
