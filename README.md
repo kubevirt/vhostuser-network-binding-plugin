@@ -92,3 +92,24 @@ spec:
             requestName: vhost-port
 ```
 
+## OVS-DPDK DRA Driver metadata API
+
+Currently, the only DRA driver supported by the binding plugin is the
+[OVS-DPDK DRA driver](https://github.com/k8snetworkplumbingwg/dra-driver-ovsdpdk).
+
+These are the fields that are expected to be present in the DRA metadata:
+
+| Attribute key | Type | Description |
+|---|---|---|
+| `vhost-user-path` | String | Container-side path of the vhost-user socket |
+| `mtu` | Integer | MTU value |
+
+
+## Compatibility matrix
+
+The following table shows the combinations of version of each components that are known to work:
+
+
+| vhost-user-binding-plugin | OVS-DPDK DRA driver | Kubevirt | Kubernetes |
+|---|---|---|---|
+| 0.1.0 | 0.1.0 | 1.9.0 | 1.36 |
