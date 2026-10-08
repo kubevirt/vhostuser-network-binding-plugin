@@ -35,8 +35,8 @@ import (
 )
 
 const (
-	// DriverName is the DRA driver name used by the OVS-DPDK DRA driver.
-	DriverName = "ovsdpdk.k8snetworkplumbingwg.io"
+	// DriverName is the DRA driver name used by groutdra (POC fork).
+	DriverName = "grout.openperouter.io"
 
 	// VhostPathKey is the device attribute key that the OVS-DPDK DRA driver
 	// uses to publish the vhost-user socket path.

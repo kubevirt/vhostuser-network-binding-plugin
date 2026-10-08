@@ -312,6 +312,33 @@ var _ = Describe("vhostuser network configurator", func() {
 			Expect(mutatedDomain.Devices.Interfaces[0].Source.VHostUser.Chardev.UNIX.Mode).To(Equal("server"))
 		})
 
+		It("should enable virtio IOMMU access-platform for the opt-in VMI", func() {
+			ifaces := []vmschema.Interface{vhostIface("default")}
+			networks := []vmschema.Network{draNetwork("default", "default", "vhost-port")}
+			vmi := buildVMI(ifaces, networks)
+			vmi.Annotations = map[string]string{domain.VirtualIOMMUAnnotation: "true"}
+
+			testMutator, err := domain.NewVhostUserNetworkConfigurator(vmi, defaultDriver("default"), "vhostuser")
+			Expect(err).ToNot(HaveOccurred())
+
+			mutatedDomain, err := testMutator.Mutate(&libvirtxml.Domain{})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(mutatedDomain.Devices.Interfaces[0].Driver.IOMMU).To(Equal("on"))
+		})
+
+		It("should not enable virtio IOMMU access-platform without the opt-in annotation", func() {
+			ifaces := []vmschema.Interface{vhostIface("default")}
+			networks := []vmschema.Network{draNetwork("default", "default", "vhost-port")}
+			vmi := buildVMI(ifaces, networks)
+
+			testMutator, err := domain.NewVhostUserNetworkConfigurator(vmi, defaultDriver("default"), "vhostuser")
+			Expect(err).ToNot(HaveOccurred())
+
+			mutatedDomain, err := testMutator.Mutate(&libvirtxml.Domain{})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(mutatedDomain.Devices.Interfaces[0].Driver.IOMMU).To(BeEmpty())
+		})
+
 		It("should not override other interfaces", func() {
 			ifaces := []vmschema.Interface{
 				vhostIface("default"),
