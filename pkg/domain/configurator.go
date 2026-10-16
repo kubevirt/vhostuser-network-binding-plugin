@@ -34,6 +34,9 @@ const (
 	MaxQueueNum = uint(256)
 	// QueueSize is the default queue size.
 	QueueSize = uint(1024)
+	// VirtualIOMMUAnnotation opts a VMI into an emulated Intel IOMMU. This lets
+	// a DPDK guest bind virtio devices to vfio-pci.
+	VirtualIOMMUAnnotation = "grout.openperouter.io/virtual-iommu"
 )
 
 type VhostUserInterface struct {
@@ -45,6 +48,7 @@ type VhostUserNetworkConfigurator struct {
 	interfaces            []*VhostUserInterface
 	queues                uint
 	useVirtioTransitional bool
+	useVirtualIOMMU       bool
 }
 
 type ClaimInfo struct {
@@ -70,11 +74,13 @@ func NewVhostUserNetworkConfigurator(
 
 	queues := computeQueues(vmi)
 	useVirtioTransitional := vmi.Spec.Domain.Devices.UseVirtioTransitional != nil && *vmi.Spec.Domain.Devices.UseVirtioTransitional
+	useVirtualIOMMU := vmi.Annotations[VirtualIOMMUAnnotation] == "true"
 
 	return &VhostUserNetworkConfigurator{
 		interfaces:            vhostIfaces,
 		queues:                queues,
 		useVirtioTransitional: useVirtioTransitional,
+		useVirtualIOMMU:       useVirtualIOMMU,
 	}, nil
 }
 
@@ -139,6 +145,18 @@ func (p VhostUserNetworkConfigurator) Mutate(domain *libvirtxml.Domain) (*libvir
 	}
 
 	utils.EnsureSharedMemoryBacking(domain)
+	if p.useVirtualIOMMU {
+		if domain.Features == nil {
+			domain.Features = &libvirtxml.DomainFeatureList{}
+		}
+		domain.Features.SMM = &libvirtxml.DomainFeatureSMM{State: "on"}
+		iommu := &libvirtxml.DomainIOMMU{
+			Model:  "intel",
+			Driver: &libvirtxml.DomainIOMMUDriver{IntRemap: "on"},
+		}
+		domain.Devices.IOMMU = iommu
+		domain.Devices.IOMMUs = []libvirtxml.DomainIOMMU{*iommu}
+	}
 
 	return domain, nil
 }
@@ -166,6 +184,13 @@ func (p VhostUserNetworkConfigurator) generateDomainInterface(vhostIface *VhostU
 			RXQueueSize: QueueSize,
 			Queues:      p.queues,
 		},
+	}
+	if p.useVirtualIOMMU {
+		// Ask libvirt/QEMU to negotiate VIRTIO_F_ACCESS_PLATFORM for this
+		// vhost-user device. The guest IOMMU alone is insufficient: without
+		// this attribute virtio does not use the IOMMU translation domain and
+		// DPDK cannot use the device with VFIO.
+		domIface.Driver.IOMMU = "on"
 	}
 
 	if vhostIface.VmiSpecIface.PciAddress != "" {
